@@ -62,7 +62,9 @@ A comprehensive UI engine for ESP32 with SSD1306 OLED displays featuring smooth 
 - UP Button → D5 (GPIO14) → GND (internal pullup)
 - DOWN Button → D6 (GPIO12) → GND (internal pullup)
 - SELECT Button → D7 (GPIO13) → GND (internal pullup)
-- BACK Button → D0 (GPIO16) → GND (internal pullup)
+- BACK Button → D3 (GPIO0) → GND (internal pullup) ⚠️ **Note: Changed from D0**
+
+**Important:** Use **GPIO0 (D3)** for BACK button, NOT GPIO16 (D0). GPIO16 has limited INPUT_PULLUP support on ESP8266.
 
 **NodeMCU Pin Reference:**
 - D0 = GPIO16, D1 = GPIO5, D2 = GPIO4, D3 = GPIO0
@@ -79,12 +81,32 @@ Install these libraries through Arduino Library Manager:
 
 ## Installation
 
-1. Copy `MintUi.h` to your Arduino sketch folder
-2. For ESP32: Use `MintUi-EXAMPLE.ino`
-3. For NodeMCU: Use `MintUI_NodeMCU_Example.ino`
-4. Install required libraries (Adafruit GFX, Adafruit SSD1306)
-5. Select your board (ESP32 Dev Module or NodeMCU 1.0)
-6. Upload!
+### Quick Start
+
+1. **Install required libraries** via Arduino Library Manager:
+   - Adafruit GFX Library
+   - Adafruit SSD1306
+
+2. **Choose your platform example:**
+   - ESP32: Open `examples/MintUI_ESP32_Example/MintUI_ESP32_Example.ino`
+   - NodeMCU: Open `examples/MintUI_NodeMCU_Example/MintUI_NodeMCU_Example.ino`
+
+3. **Copy `MintUi.h`** to the same folder as your sketch (or to Arduino libraries folder)
+
+4. **Select your board** and upload!
+
+### ⚠️ Important: Folder Structure
+
+Arduino requires each sketch to be in **its own folder** with a matching filename:
+```
+✅ Correct:
+examples/MintUI_ESP32_Example/MintUI_ESP32_Example.ino
+
+❌ Wrong:
+examples/MintUI_ESP32_Example.ino
+```
+
+**Common Error:** If you get `redefinition of 'UIEngine* ui'` errors, you have multiple .ino files in the same folder. Keep examples in separate folders!
 
 ## Usage
 
@@ -330,9 +352,12 @@ The example sketch demonstrates:
 - Verify I2C address (0x3C is common, some use 0x3D)
 - Try scanning I2C bus with I2C scanner sketch
 
-**Buttons not responding:**
+**Buttons not responding (NodeMCU/ESP8266):**
+- ⚠️ **Use GPIO0 (D3) for BACK button, NOT GPIO16 (D0)**
+- GPIO16 has limited INPUT_PULLUP support on ESP8266
 - Check button wiring (should connect GPIO to GND when pressed)
 - Verify internal pull-ups are working
+- See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed debug steps
 - Adjust debounce delay if needed
 
 **Animations choppy:**

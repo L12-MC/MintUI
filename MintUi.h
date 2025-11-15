@@ -468,9 +468,11 @@ private:
     // Button pins (customize as needed)
     int btnUp, btnDown, btnSelect, btnBack;
     
-    // Debounce
+    // Debounce - track both raw reading and stable state
     unsigned long lastDebounceTime[4];
-    bool lastButtonState[4];
+    bool lastButtonReading[4];
+    bool buttonState[4];
+    bool lastStableState[4];
     const unsigned long debounceDelay = 50;
     
 public:
@@ -484,7 +486,9 @@ public:
         windowStack = new Window*[maxStackSize];
         for (int i = 0; i < 4; i++) {
             lastDebounceTime[i] = 0;
-            lastButtonState[i] = HIGH;
+            lastButtonReading[i] = false;
+            buttonState[i] = false;
+            lastStableState[i] = false;
         }
     }
     
@@ -496,11 +500,35 @@ public:
     }
     
     bool begin() {
-        // Initialize buttons
+        // Initialize buttons with INPUT_PULLUP
         pinMode(btnUp, INPUT_PULLUP);
         pinMode(btnDown, INPUT_PULLUP);
         pinMode(btnSelect, INPUT_PULLUP);
+        
+        // GPIO16 on ESP8266 needs INPUT mode (use external pullup resistor)
+        // Or use a different GPIO with internal pullup support
+        #ifdef ESP8266
+        if (btnBack == 16) {
+            // GPIO16 doesn't support INPUT_PULLUP on ESP8266
+            // Use INPUT mode - requires external 10K pullup resistor
+            pinMode(btnBack, INPUT);
+        } else {
+            pinMode(btnBack, INPUT_PULLUP);
+        }
+        #else
         pinMode(btnBack, INPUT_PULLUP);
+        #endif
+        
+        // Give pins time to stabilize
+        delay(100);
+        
+        // Initialize button states to current readings
+        for (int i = 0; i < 4; i++) {
+            lastButtonReading[i] = false;
+            buttonState[i] = false;
+            lastStableState[i] = false;
+            lastDebounceTime[i] = millis();
+        }
         
         // Initialize display
         if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
@@ -554,21 +582,35 @@ public:
     
 private:
     bool readButton(int pin, int index) {
-        bool reading = digitalRead(pin) == LOW;
+        // Read current state (LOW = pressed with pullup)
+        bool reading = (digitalRead(pin) == LOW);
         
-        if (reading != lastButtonState[index]) {
+        // If reading changed, reset debounce timer
+        if (reading != lastButtonReading[index]) {
             lastDebounceTime[index] = millis();
+            lastButtonReading[index] = reading;
         }
         
-        bool pressed = false;
+        // If reading has been stable for debounce delay
         if ((millis() - lastDebounceTime[index]) > debounceDelay) {
-            if (reading && !lastButtonState[index]) {
-                pressed = true;
+            // Update button state if it changed
+            if (reading != buttonState[index]) {
+                buttonState[index] = reading;
+                
+                // Detect button press (transition from not pressed to pressed)
+                if (buttonState[index] && !lastStableState[index]) {
+                    lastStableState[index] = true;
+                    return true; // Button was just pressed
+                }
+                
+                // Detect button release
+                if (!buttonState[index] && lastStableState[index]) {
+                    lastStableState[index] = false;
+                }
             }
         }
         
-        lastButtonState[index] = reading;
-        return pressed;
+        return false;
     }
     
     void handleInput() {
