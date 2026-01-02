@@ -11,29 +11,33 @@
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 
-// Animation easing curve based on CSS linear()
-// linear(0, 0.221 2.5%, 0.421 5.2%, 0.592 8%, 0.733 10.9%, 0.852 14%, 
-//        0.901 15.6%, 0.946 17.3%, 0.984 19%, 1.017 20.8%, 1.045 22.7%, 
-//        1.068 24.7%, 1.089 27.2%, 1.102 29.9%, 1.109 32.8%, 1.109 36.1%, 
-//        1.105 39.1%, 1.096 42.5%, 1.052 54.7%, 1.035 59.8%, 1.024 64.2%, 
-//        1.015 68.6%, 1.007 74.3%, 1.002 80.7%, 1 87.9%, 1)
+// -------------------------------------------------------------------------
+// Easing Curve
+// -------------------------------------------------------------------------
 
 class EasingCurve {
-private:
-    static const int CURVE_POINTS = 26;
-    
+public:
     struct Point {
         float progress;
         float value;
     };
-    
-    static const Point curve[CURVE_POINTS];
-    
-public:
+
     static float ease(float t) {
         if (t <= 0.0f) return 0.0f;
         if (t >= 1.0f) return 1.0f;
-        
+
+        // Curve data moved inside function to prevent linker "multiple definition" errors
+        static const Point curve[] = {
+            {0.000f, 0.000f}, {0.025f, 0.221f}, {0.052f, 0.421f}, {0.080f, 0.592f},
+            {0.109f, 0.733f}, {0.140f, 0.852f}, {0.156f, 0.901f}, {0.173f, 0.946f},
+            {0.190f, 0.984f}, {0.208f, 1.017f}, {0.227f, 1.045f}, {0.247f, 1.068f},
+            {0.272f, 1.089f}, {0.299f, 1.102f}, {0.328f, 1.109f}, {0.361f, 1.109f},
+            {0.391f, 1.105f}, {0.425f, 1.096f}, {0.547f, 1.052f}, {0.598f, 1.035f},
+            {0.642f, 1.024f}, {0.686f, 1.015f}, {0.743f, 1.007f}, {0.807f, 1.002f},
+            {0.879f, 1.000f}, {1.000f, 1.000f}
+        };
+        static const int CURVE_POINTS = sizeof(curve) / sizeof(curve[0]);
+
         // Linear interpolation between curve points
         for (int i = 0; i < CURVE_POINTS - 1; i++) {
             if (t >= curve[i].progress && t <= curve[i + 1].progress) {
@@ -48,37 +52,10 @@ public:
     }
 };
 
-// Define the curve points
-const EasingCurve::Point EasingCurve::curve[EasingCurve::CURVE_POINTS] = {
-    {0.000f, 0.000f},
-    {0.025f, 0.221f},
-    {0.052f, 0.421f},
-    {0.080f, 0.592f},
-    {0.109f, 0.733f},
-    {0.140f, 0.852f},
-    {0.156f, 0.901f},
-    {0.173f, 0.946f},
-    {0.190f, 0.984f},
-    {0.208f, 1.017f},
-    {0.227f, 1.045f},
-    {0.247f, 1.068f},
-    {0.272f, 1.089f},
-    {0.299f, 1.102f},
-    {0.328f, 1.109f},
-    {0.361f, 1.109f},
-    {0.391f, 1.105f},
-    {0.425f, 1.096f},
-    {0.547f, 1.052f},
-    {0.598f, 1.035f},
-    {0.642f, 1.024f},
-    {0.686f, 1.015f},
-    {0.743f, 1.007f},
-    {0.807f, 1.002f},
-    {0.879f, 1.000f},
-    {1.000f, 1.000f}
-};
+// -------------------------------------------------------------------------
+// Animation
+// -------------------------------------------------------------------------
 
-// Animation class
 class Animation {
 private:
     unsigned long startTime;
@@ -117,11 +94,10 @@ public:
     void stop() { running = false; }
 };
 
-// Forward declarations
-class UIEngine;
-class Window;
+// -------------------------------------------------------------------------
+// Widget Base Class
+// -------------------------------------------------------------------------
 
-// Widget base class
 class Widget {
 protected:
     int x, y, width, height;
@@ -136,7 +112,9 @@ public:
     
     virtual ~Widget() {}
     
-    virtual void draw(Adafruit_SSD1306& display) = 0;
+    // UPDATED: draw now accepts offsets for animation
+    virtual void draw(Adafruit_SSD1306& display, int offsetX, int offsetY) = 0;
+    
     virtual bool canFocus() const { return false; }
     virtual void onFocus() { focused = true; }
     virtual void onBlur() { focused = false; }
@@ -158,7 +136,10 @@ public:
     }
 };
 
-// Label widget
+// -------------------------------------------------------------------------
+// Label Widget
+// -------------------------------------------------------------------------
+
 class Label : public Widget {
 private:
     String text;
@@ -171,18 +152,20 @@ public:
         : Widget(x, y, text.length() * 6 * textSize, 8 * textSize, id),
           text(text), textSize(textSize), centered(centered) {}
     
-    void draw(Adafruit_SSD1306& display) override {
+    void draw(Adafruit_SSD1306& display, int offsetX, int offsetY) override {
         if (!visible) return;
         
         display.setTextSize(textSize);
         display.setTextColor(SSD1306_WHITE);
         
-        int drawX = x;
+        int drawX = x + offsetX;
+        int drawY = y + offsetY;
+
         if (centered) {
-            drawX = x - (text.length() * 6 * textSize) / 2;
+            drawX = (x + offsetX) - (text.length() * 6 * textSize) / 2;
         }
         
-        display.setCursor(drawX, y);
+        display.setCursor(drawX, drawY);
         display.print(text);
     }
     
@@ -194,7 +177,10 @@ public:
     String getText() const { return text; }
 };
 
-// Button widget
+// -------------------------------------------------------------------------
+// Button Widget
+// -------------------------------------------------------------------------
+
 class Button : public Widget {
 private:
     String text;
@@ -208,28 +194,31 @@ public:
         : Widget(x, y, w, h, id), text(text), pressed(false), 
           callback(callback) {}
     
-    void draw(Adafruit_SSD1306& display) override {
+    void draw(Adafruit_SSD1306& display, int offsetX, int offsetY) override {
         if (!visible) return;
         
         float animValue = pressAnim.getValue();
-        int offset = (int)animValue;
+        int pressOffset = (int)animValue;
         
+        int drawX = x + offsetX;
+        int drawY = y + offsetY;
+
         // Draw button border
         if (focused) {
-            display.fillRect(x - 1 + offset, y - 1 + offset, 
+            display.fillRect(drawX - 1 + pressOffset, drawY - 1 + pressOffset, 
                            width + 2, height + 2, SSD1306_WHITE);
-            display.fillRect(x + offset, y + offset, 
+            display.fillRect(drawX + pressOffset, drawY + pressOffset, 
                            width, height, SSD1306_BLACK);
         } else {
-            display.drawRect(x + offset, y + offset, 
+            display.drawRect(drawX + pressOffset, drawY + pressOffset, 
                            width, height, SSD1306_WHITE);
         }
         
         // Draw text centered
         display.setTextSize(1);
-        display.setTextColor(focused ? SSD1306_WHITE : SSD1306_WHITE);
-        int textX = x + (width - text.length() * 6) / 2 + offset;
-        int textY = y + (height - 8) / 2 + offset;
+        display.setTextColor(SSD1306_WHITE); // Always white for monochrome contrast
+        int textX = drawX + (width - text.length() * 6) / 2 + pressOffset;
+        int textY = drawY + (height - 8) / 2 + pressOffset;
         display.setCursor(textX, textY);
         display.print(text);
     }
@@ -250,7 +239,10 @@ public:
     void setCallback(void (*cb)()) { callback = cb; }
 };
 
-// Checkbox widget
+// -------------------------------------------------------------------------
+// Checkbox Widget
+// -------------------------------------------------------------------------
+
 class Checkbox : public Widget {
 private:
     String label;
@@ -265,31 +257,41 @@ public:
                  12, id),
           label(label), checked(checked), onChange(onChange) {}
     
-    void draw(Adafruit_SSD1306& display) override {
+    void draw(Adafruit_SSD1306& display, int offsetX, int offsetY) override {
         if (!visible) return;
         
         float animValue = checkAnim.getValue();
+        int drawX = x + offsetX;
+        int drawY = y + offsetY;
         
         // Draw checkbox border
         if (focused) {
-            display.fillRect(x - 1, y - 1, 14, 14, SSD1306_WHITE);
-            display.fillRect(x, y, 12, 12, SSD1306_BLACK);
+            display.fillRect(drawX - 1, drawY - 1, 14, 14, SSD1306_WHITE);
+            display.fillRect(drawX, drawY, 12, 12, SSD1306_BLACK);
         }
-        display.drawRect(x, y, 12, 12, SSD1306_WHITE);
+        display.drawRect(drawX, drawY, 12, 12, SSD1306_WHITE);
         
         // Draw checkmark with animation
-        if (checked || checkAnim.isRunning()) {
-            int size = (int)(8 * animValue);
-            if (size > 0) {
-                display.fillRect(x + 2, y + 2, size, size, SSD1306_WHITE);
-            }
+        // Visual calculation: if checked, scale up from 0 to 8. If unchecked, scale down.
+        // Logic handled by start() params in onClick.
+        // We use animValue as the size.
+        
+        int size = (int)(8 * animValue);
+        // Fallback for static state if animation finished
+        if (!checkAnim.isRunning() && checked) size = 8;
+        if (!checkAnim.isRunning() && !checked) size = 0;
+
+        if (size > 0) {
+            // Center the box
+            int offset = (12 - size) / 2;
+            display.fillRect(drawX + offset, drawY + offset, size, size, SSD1306_WHITE);
         }
         
         // Draw label
         if (label.length() > 0) {
             display.setTextSize(1);
             display.setTextColor(SSD1306_WHITE);
-            display.setCursor(x + 16, y + 2);
+            display.setCursor(drawX + 16, drawY + 2);
             display.print(label);
         }
     }
@@ -298,8 +300,9 @@ public:
     
     void onClick() override {
         checked = !checked;
+        // Animate size from 0->1 or 1->0
         checkAnim.start(checked ? 0.0f : 1.0f, 
-                       checked ? 1.0f : 0.0f, 200);
+                        checked ? 1.0f : 0.0f, 150);
         
         if (onChange) {
             onChange(checked);
@@ -311,7 +314,7 @@ public:
         if (c != checked) {
             checked = c;
             checkAnim.start(checked ? 0.0f : 1.0f, 
-                          checked ? 1.0f : 0.0f, 200);
+                          checked ? 1.0f : 0.0f, 150);
         }
     }
     
@@ -319,7 +322,10 @@ public:
     String getLabel() const { return label; }
 };
 
-// Window class
+// -------------------------------------------------------------------------
+// Window
+// -------------------------------------------------------------------------
+
 class Window {
 private:
     String title;
@@ -329,12 +335,13 @@ private:
     int focusedIndex;
     Animation slideAnim;
     bool transitioning;
-    int slideOffset;
+    int slideStart;
+    int slideEnd;
     
 public:
     Window(const String& title, int maxWidgets = 10)
         : title(title), widgetCount(0), maxWidgets(maxWidgets), 
-          focusedIndex(-1), transitioning(false), slideOffset(0) {
+          focusedIndex(-1), transitioning(false), slideStart(0), slideEnd(0) {
         widgets = new Widget*[maxWidgets];
     }
     
@@ -357,37 +364,50 @@ public:
         }
     }
     
-    void draw(Adafruit_SSD1306& display) {
-        int offset = slideOffset + (int)slideAnim.getValue();
+    void draw(Adafruit_SSD1306& display, int globalXOffset = 0, int globalYOffset = 0) {
+        int animOffset = 0;
+        if (transitioning) {
+            animOffset = (int)slideAnim.getValue();
+        } else {
+            animOffset = slideEnd;
+        }
+
+        int totalXOffset = globalXOffset + animOffset;
+        int totalYOffset = globalYOffset;
         
         // Draw title bar
-        display.fillRect(0 + offset, 0, SCREEN_WIDTH, 10, SSD1306_WHITE);
+        display.fillRect(totalXOffset, totalYOffset, SCREEN_WIDTH, 10, SSD1306_WHITE);
         display.setTextSize(1);
         display.setTextColor(SSD1306_BLACK);
-        display.setCursor(2 + offset, 1);
+        display.setCursor(totalXOffset + 2, totalYOffset + 1);
         display.print(title);
         
         // Draw widgets
         display.setTextColor(SSD1306_WHITE);
         for (int i = 0; i < widgetCount; i++) {
             if (widgets[i]->isVisible()) {
-                // Temporarily offset widget positions for animation
-                int oldX = widgets[i]->getX();
-                widgets[i]->draw(display);
+                widgets[i]->draw(display, totalXOffset, totalYOffset);
             }
+        }
+
+        // Check animation status
+        if (transitioning && !slideAnim.isRunning()) {
+            transitioning = false;
         }
     }
     
     void startSlideIn(bool fromRight) {
         transitioning = true;
-        slideOffset = fromRight ? SCREEN_WIDTH : -SCREEN_WIDTH;
-        slideAnim.start(slideOffset, 0, 300);
-        slideOffset = 0;
+        slideStart = fromRight ? SCREEN_WIDTH : -SCREEN_WIDTH;
+        slideEnd = 0;
+        slideAnim.start(slideStart, slideEnd, 250);
     }
     
     void startSlideOut(bool toRight) {
         transitioning = true;
-        slideAnim.start(0, toRight ? SCREEN_WIDTH : -SCREEN_WIDTH, 300);
+        slideStart = 0;
+        slideEnd = toRight ? SCREEN_WIDTH : -SCREEN_WIDTH;
+        slideAnim.start(slideStart, slideEnd, 250);
     }
     
     bool isTransitioning() {
@@ -398,37 +418,41 @@ public:
     }
     
     void focusNext() {
-        if (focusedIndex >= 0) {
-            widgets[focusedIndex]->onBlur();
-        }
+        if (widgetCount == 0) return;
         
-        int startIndex = focusedIndex;
+        int start = focusedIndex;
+        if (start == -1) start = 0;
+
+        int current = start;
         do {
-            focusedIndex = (focusedIndex + 1) % widgetCount;
-            if (widgets[focusedIndex]->canFocus() && 
-                widgets[focusedIndex]->isVisible()) {
+            current = (current + 1) % widgetCount;
+            if (widgets[current]->canFocus() && widgets[current]->isVisible()) {
+                if (focusedIndex != -1) widgets[focusedIndex]->onBlur();
+                focusedIndex = current;
                 widgets[focusedIndex]->onFocus();
                 return;
             }
-        } while (focusedIndex != startIndex);
+        } while (current != start);
     }
     
     void focusPrevious() {
-        if (focusedIndex >= 0) {
-            widgets[focusedIndex]->onBlur();
-        }
+        if (widgetCount == 0) return;
         
-        int startIndex = focusedIndex;
+        int start = focusedIndex;
+        if (start == -1) start = 0;
+
+        int current = start;
         do {
-            focusedIndex--;
-            if (focusedIndex < 0) focusedIndex = widgetCount - 1;
+            current--;
+            if (current < 0) current = widgetCount - 1;
             
-            if (widgets[focusedIndex]->canFocus() && 
-                widgets[focusedIndex]->isVisible()) {
+            if (widgets[current]->canFocus() && widgets[current]->isVisible()) {
+                if (focusedIndex != -1) widgets[focusedIndex]->onBlur();
+                focusedIndex = current;
                 widgets[focusedIndex]->onFocus();
                 return;
             }
-        } while (focusedIndex != startIndex);
+        } while (current != start);
     }
     
     void clickFocused() {
@@ -457,29 +481,33 @@ public:
     String getTitle() const { return title; }
 };
 
-// Main UI Engine class
+// -------------------------------------------------------------------------
+// UI Engine
+// -------------------------------------------------------------------------
+
 class UIEngine {
 private:
     Adafruit_SSD1306 display;
     Window** windowStack;
     int stackSize;
     int maxStackSize;
+    bool popping; // State to track if we are currently popping a window
     
-    // Button pins (customize as needed)
+    // Button pins
     int btnUp, btnDown, btnSelect, btnBack;
     
-    // Debounce - track both raw reading and stable state
+    // Debounce
     unsigned long lastDebounceTime[4];
     bool lastButtonReading[4];
     bool buttonState[4];
     bool lastStableState[4];
-    const unsigned long debounceDelay = 50;
+    const unsigned long debounceDelay = 30; // Shorter delay for snappier feel
     
 public:
     UIEngine(int btnUp = 12, int btnDown = 14, 
              int btnSelect = 27, int btnBack = 26)
         : display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET),
-          stackSize(0), maxStackSize(5),
+          stackSize(0), maxStackSize(5), popping(false),
           btnUp(btnUp), btnDown(btnDown), 
           btnSelect(btnSelect), btnBack(btnBack) {
         
@@ -493,46 +521,34 @@ public:
     }
     
     ~UIEngine() {
-        for (int i = 0; i < stackSize; i++) {
-            delete windowStack[i];
-        }
+        // Warning: This does not delete the windows themselves if created externally
+        // But for this simple engine, we assume stack management is enough
         delete[] windowStack;
     }
     
     bool begin() {
-        // Initialize buttons with INPUT_PULLUP
         pinMode(btnUp, INPUT_PULLUP);
         pinMode(btnDown, INPUT_PULLUP);
         pinMode(btnSelect, INPUT_PULLUP);
         
-        // GPIO16 on ESP8266 needs INPUT mode (use external pullup resistor)
-        // Or use a different GPIO with internal pullup support
         #ifdef ESP8266
-        if (btnBack == 16) {
-            // GPIO16 doesn't support INPUT_PULLUP on ESP8266
-            // Use INPUT mode - requires external 10K pullup resistor
-            pinMode(btnBack, INPUT);
-        } else {
-            pinMode(btnBack, INPUT_PULLUP);
-        }
+        if (btnBack == 16) pinMode(btnBack, INPUT);
+        else pinMode(btnBack, INPUT_PULLUP);
         #else
         pinMode(btnBack, INPUT_PULLUP);
         #endif
         
-        // Give pins time to stabilize
-        delay(100);
+        // Initialize I2C first!
+        Wire.begin();
         
-        // Initialize button states to current readings
-        for (int i = 0; i < 4; i++) {
-            lastButtonReading[i] = false;
-            buttonState[i] = false;
-            lastStableState[i] = false;
-            lastDebounceTime[i] = millis();
-        }
-        
-        // Initialize display
+        // Address 0x3C for 128x64
         if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
             return false;
+        }
+        
+        // Initialize button states
+        for (int i = 0; i < 4; i++) {
+            lastDebounceTime[i] = millis();
         }
         
         display.clearDisplay();
@@ -544,13 +560,15 @@ public:
         if (stackSize < maxStackSize) {
             window->startSlideIn(true);
             windowStack[stackSize++] = window;
+            popping = false;
         }
     }
     
     void popWindow() {
-        if (stackSize > 1) {
-            windowStack[stackSize - 1]->startSlideOut(true);
-            // We'll actually remove it after the animation completes
+        if (stackSize > 1 && !popping) {
+            Window* current = windowStack[stackSize - 1];
+            current->startSlideOut(true); // Slide out to the right
+            popping = true;
         }
     }
     
@@ -561,60 +579,71 @@ public:
         return nullptr;
     }
     
+    Adafruit_SSD1306& getDisplay() {
+        return display;
+    }
+    
     void update() {
         Window* current = getCurrentWindow();
         if (!current) return;
         
-        // Handle button inputs
         handleInput();
         
-        // Clean up completed transitions
-        if (stackSize > 1 && current->isTransitioning() == false) {
-            // Check if we need to remove the window after slide-out
-            // (This would require additional state tracking)
+        display.clearDisplay();
+        
+        // RENDER LOGIC
+        
+        // If the top window is transitioning, draw the window UNDER it first
+        // so we don't see a black background.
+        if (stackSize > 1 && current->isTransitioning()) {
+             // Draw the previous window at (0,0) - it stays static
+             windowStack[stackSize - 2]->draw(display, 0, 0);
         }
         
-        // Render
-        display.clearDisplay();
+        // Draw the current window (which might be moving)
         current->draw(display);
+        
+        // STATE LOGIC
+        
+        // If we were popping and the animation is done, remove from stack
+        if (popping && !current->isTransitioning()) {
+            stackSize--;
+            popping = false;
+            // The previous window is now current. 
+            // Note: We do NOT delete the popped window object here.
+            // Ownership remains with the creator/global scope.
+        }
+        
         display.display();
     }
     
 private:
     bool readButton(int pin, int index) {
-        // Read current state (LOW = pressed with pullup)
         bool reading = (digitalRead(pin) == LOW);
         
-        // If reading changed, reset debounce timer
         if (reading != lastButtonReading[index]) {
             lastDebounceTime[index] = millis();
             lastButtonReading[index] = reading;
         }
         
-        // If reading has been stable for debounce delay
         if ((millis() - lastDebounceTime[index]) > debounceDelay) {
-            // Update button state if it changed
             if (reading != buttonState[index]) {
                 buttonState[index] = reading;
-                
-                // Detect button press (transition from not pressed to pressed)
                 if (buttonState[index] && !lastStableState[index]) {
                     lastStableState[index] = true;
-                    return true; // Button was just pressed
+                    return true;
                 }
-                
-                // Detect button release
                 if (!buttonState[index] && lastStableState[index]) {
                     lastStableState[index] = false;
                 }
             }
         }
-        
         return false;
     }
     
     void handleInput() {
         Window* current = getCurrentWindow();
+        // Block input during transitions
         if (!current || current->isTransitioning()) return;
         
         if (readButton(btnUp, 0)) {
@@ -630,6 +659,7 @@ private:
         }
         
         if (readButton(btnBack, 3)) {
+            // Only allow manual pop if not already popping
             if (stackSize > 1) {
                 popWindow();
             }
